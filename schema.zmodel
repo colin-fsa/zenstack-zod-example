@@ -1,0 +1,18 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator js {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                      String                    @id @default(cuid()) // Unfortunate that we need to use the name id here, but authjs requires it
+  zipCode                 String?                   @regex('^[0-9a-zA-Z]{4,16}$')
+}
+
+plugin zod {
+  provider = '@core/zod'
+  output = 'zod'
+}
