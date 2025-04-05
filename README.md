@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ZenStack Zod Plugin Issue Reproduction
 
-## Getting Started
+This repository is a minimal reproduction example (MRE) demonstrating an issue with ZenStack's Zod schema generation.
 
-First, run the development server:
+## The Issue
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+When using ZenStack with models that have validation rules (like regex validation), there's an inconsistency in how Zod schemas are generated depending on whether the Zod plugin is defined in the schema.zmodel file:
+
+1. **Without the Zod plugin defined**: 
+   - Zod schemas are saved to `@zenstackhq/runtime/zod/models` (in node_modules)
+   - These schemas **do not include** the validation rules specified in the model
+
+2. **With the Zod plugin defined** (as shown in our schema.zmodel):
+   ```
+   plugin zod {
+     provider = '@core/zod'
+     output = './zod'
+   }
+   ```
+   - Schemas are still written to `@zenstackhq/runtime/zod/models` 
+   - But the **correct schema with regex validation** is also written to the specified output path
+
+## Example
+
+In our example User model with zipCode regex validation:
+
+```zmodel
+model User {
+  id      String  @id @default(cuid())
+  zipCode String? @regex('^[0-9a-zA-Z]{4,16}$')
+}
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The Zod schema in node_modules does not include the regex validation:
+```typescript
+// From node_modules/.zenstack/zod/models/User.schema.d.ts
+export declare const UserScalarSchema: z.ZodObject<{
+    id: z.ZodString;
+    zipCode: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+}, "strict", z.ZodTypeAny, {
+    id: string;
+    zipCode?: string | null | undefined;
+}, {
+    id: string;
+    zipCode?: string | null | undefined;
+}>;
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+While the schema generated in our project's ./zod directory includes the validation:
+```typescript
+// From ./zod/models/User.schema.ts
+const baseSchema = z.object({
+    id: z.string(),
+    zipCode: z.string().regex(new RegExp("^[0-9a-zA-Z]{4,16}$")).nullish(),
+}).strict();
+```
